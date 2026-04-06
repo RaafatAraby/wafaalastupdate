@@ -1,0 +1,247 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\ProjectResource\Pages\CreateProject;
+use App\Filament\Resources\ProjectResource\Pages\EditProject;
+use App\Filament\Resources\ProjectResource\Pages\ListProjects;
+use App\Models\Country;
+use App\Models\Organization;
+use App\Models\Project;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+class ProjectResource extends Resource
+{
+    protected static ?string $model = Project::class;
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationLabel = 'المشاريع';
+    protected static ?string $modelLabel = 'مشروع';
+    protected static ?string $pluralModelLabel = 'المشاريع';
+    protected static ?int $navigationSort = 1;
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            TextInput::make('title')
+                ->label('اسم المشروع')
+                ->required()
+                ->maxLength(255),
+
+            Select::make('country_id')
+                ->label('الدولة')
+                ->options(fn () => Country::query()->where('is_active', true)->orderBy('sort_order')->pluck('name_ar', 'id')->all())
+                ->searchable()
+                ->preload()
+                ->required(),
+
+            Select::make('organization_id')
+                ->label('الجهة')
+                ->options(fn () => Organization::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all())
+                ->searchable()
+                ->preload()
+                ->required(),
+
+            Select::make('funder_organization_id')
+                ->label('الجهة الممولة')
+                ->options(fn () => Organization::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all())
+                ->searchable()
+                ->preload(),
+
+            TextInput::make('approved_amount')
+                ->label('المبلغ المعتمد')
+                ->numeric()
+                ->default(0)
+                ->required(),
+
+            DatePicker::make('start_date')
+                ->label('تاريخ البداية'),
+
+            DatePicker::make('expected_end_date')
+                ->label('تاريخ النهاية المتوقع'),
+
+            DatePicker::make('actual_end_date')
+                ->label('تاريخ النهاية الفعلي'),
+
+            Select::make('state')
+                ->label('الحالة')
+                ->options([
+                    'new' => 'جديد',
+                    'pending_readiness' => 'بانتظار الجاهزية',
+                    'ready_for_execution' => 'جاهز للتنفيذ',
+                    'in_execution' => 'قيد التنفيذ',
+                    'pending_documentation' => 'بانتظار التوثيق',
+                    'delayed' => 'متأخر',
+                    'completed' => 'مكتمل',
+                    'closed' => 'مغلق',
+                ])
+                ->default('new')
+                ->required(),
+
+            Select::make('documentation_status')
+                ->label('حالة التوثيق')
+                ->options([
+                    'not_started' => 'غير مبدوء',
+                    'partial' => 'جزئي',
+                    'complete' => 'مكتمل',
+                ])
+                ->default('not_started')
+                ->required(),
+
+            Select::make('financial_status')
+                ->label('الحالة المالية')
+                ->options([
+                    'unfunded' => 'غير ممول',
+                    'partially_funded' => 'تمويل جزئي',
+                    'funded' => 'ممّول',
+                    'partially_spent' => 'صرف جزئي',
+                    'settled' => 'مسوّى',
+                ])
+                ->default('unfunded')
+                ->required(),
+
+            TextInput::make('photo_album_url')
+                ->label('رابط ألبوم الصور')
+                ->url()
+                ->maxLength(2048),
+
+            TextInput::make('video_album_url')
+                ->label('رابط ألبوم الفيديو')
+                ->url()
+                ->maxLength(2048),
+
+            Textarea::make('description')
+                ->label('الوصف')
+                ->columnSpanFull(),
+
+            Textarea::make('readiness_notes')
+                ->label('ملاحظات الجاهزية')
+                ->columnSpanFull(),
+
+            Textarea::make('execution_notes')
+                ->label('ملاحظات التنفيذ')
+                ->columnSpanFull(),
+
+            Textarea::make('documentation_notes')
+                ->label('ملاحظات التوثيق')
+                ->columnSpanFull(),
+
+            Textarea::make('final_report')
+                ->label('التقرير الختامي')
+                ->columnSpanFull(),
+        ])->columns(2);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->defaultSort('id', 'desc')
+            ->columns([
+                Tables\Columns\TextColumn::make('project_number')->label('رقم المشروع')->searchable(),
+                Tables\Columns\TextColumn::make('title')->label('اسم المشروع')->searchable(),
+                Tables\Columns\TextColumn::make('country.name_ar')->label('الدولة')->sortable(),
+                Tables\Columns\TextColumn::make('organization.name')->label('الجهة')->sortable(),
+                Tables\Columns\TextColumn::make('state')
+                    ->label('الحالة')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => [
+                        'new' => 'جديد',
+                        'pending_readiness' => 'بانتظار الجاهزية',
+                        'ready_for_execution' => 'جاهز للتنفيذ',
+                        'in_execution' => 'قيد التنفيذ',
+                        'pending_documentation' => 'بانتظار التوثيق',
+                        'delayed' => 'متأخر',
+                        'completed' => 'مكتمل',
+                        'closed' => 'مغلق',
+                    ][$state] ?? $state),
+                Tables\Columns\TextColumn::make('documentation_status')
+                    ->label('التوثيق')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => [
+                        'not_started' => 'غير مبدوء',
+                        'partial' => 'جزئي',
+                        'complete' => 'مكتمل',
+                    ][$state] ?? $state),
+                Tables\Columns\TextColumn::make('financial_status')
+                    ->label('المالية')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => [
+                        'unfunded' => 'غير ممول',
+                        'partially_funded' => 'تمويل جزئي',
+                        'funded' => 'ممّول',
+                        'partially_spent' => 'صرف جزئي',
+                        'settled' => 'مسوّى',
+                    ][$state] ?? $state),
+                Tables\Columns\TextColumn::make('approved_amount')->label('المبلغ المعتمد')->numeric(2),
+            ])
+            ->filters([
+                SelectFilter::make('country_id')
+                    ->label('الدولة')
+                    ->relationship('country', 'name_ar'),
+                SelectFilter::make('organization_id')
+                    ->label('الجهة')
+                    ->relationship('organization', 'name'),
+                SelectFilter::make('state')
+                    ->label('الحالة')
+                    ->options([
+                        'new' => 'جديد',
+                        'pending_readiness' => 'بانتظار الجاهزية',
+                        'ready_for_execution' => 'جاهز للتنفيذ',
+                        'in_execution' => 'قيد التنفيذ',
+                        'pending_documentation' => 'بانتظار التوثيق',
+                        'delayed' => 'متأخر',
+                        'completed' => 'مكتمل',
+                        'closed' => 'مغلق',
+                    ]),
+                SelectFilter::make('documentation_status')
+                    ->label('التوثيق')
+                    ->options([
+                        'not_started' => 'غير مبدوء',
+                        'partial' => 'جزئي',
+                        'complete' => 'مكتمل',
+                    ]),
+                SelectFilter::make('financial_status')
+                    ->label('المالية')
+                    ->options([
+                        'unfunded' => 'غير ممول',
+                        'partially_funded' => 'تمويل جزئي',
+                        'funded' => 'ممّول',
+                        'partially_spent' => 'صرف جزئي',
+                        'settled' => 'مسوّى',
+                    ]),
+                Filter::make('expected_end_date')
+                    ->label('الفترة')
+                    ->form([
+                        DatePicker::make('from')->label('من'),
+                        DatePicker::make('until')->label('إلى'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn (Builder $query, $date) => $query->whereDate('expected_end_date', '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $query, $date) => $query->whereDate('expected_end_date', '<=', $date));
+                    }),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListProjects::route('/'),
+            'create' => CreateProject::route('/create'),
+            'edit' => EditProject::route('/{record}/edit'),
+        ];
+    }
+}
