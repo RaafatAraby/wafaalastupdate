@@ -2,13 +2,16 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\Role;
 use App\Models\FinancialTransaction;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\User;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use UnitEnum;
@@ -21,6 +24,35 @@ class Reports extends Page
     protected static ?int $navigationSort = 80;
 
     protected string $view = 'filament.pages.reports';
+
+    /**
+     * Roles permitted to see the Reports page (navigation + direct URL).
+     *
+     * Country scoping is enforced inside filteredProjectsQuery() via
+     * User::hasGlobalDataScope() / User::allowedCountryIds(). Country-scoped
+     * roles in this list (e.g. enhancer_finance_central) only see data for
+     * countries bound to the user via user_countries.
+     */
+    private static function allowedRoles(): array
+    {
+        return [
+            Role::SystemAdmin->value,
+            Role::BoardSupervisor->value,
+            Role::EnhancerFinanceCentral->value,
+            Role::FinalReportPreparer->value,
+        ];
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = Auth::user();
+        return $user instanceof User && $user->hasAnyRole(self::allowedRoles());
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canAccess();
+    }
 
     public array $summary = [];
     public array $projectsByState = [];
@@ -40,7 +72,18 @@ class Reports extends Page
             'date_to' => $request->query('date_to'),
         ];
 
-        $this->countries = DB::table('countries')->orderBy('name_ar')->pluck('name_ar', 'id')->toArray();
+        $countriesQuery = DB::table('countries')->orderBy('name_ar');
+        $user = Auth::user();
+        if ($user instanceof User && ! $user->hasGlobalDataScope()) {
+            $allowedCountryIds = $user->allowedCountryIds();
+            $countriesQuery->whereIn('id', $allowedCountryIds ?: [0]);
+            // If the user supplied a country filter outside their scope, drop it.
+            if (! empty($this->filters['country_id'])
+                && ! in_array((int) $this->filters['country_id'], array_map('intval', $allowedCountryIds), true)) {
+                $this->filters['country_id'] = null;
+            }
+        }
+        $this->countries = $countriesQuery->pluck('name_ar', 'id')->toArray();
         $this->organizations = Organization::query()->orderBy('name')->pluck('name', 'id')->toArray();
 
         $this->summary = $this->buildSummary();
@@ -57,6 +100,16 @@ class Reports extends Page
             $query->where('is_archived', false);
         } elseif (Schema::hasColumn('projects', 'archived_at')) {
             $query->whereNull('archived_at');
+        }
+
+        // Country scoping for country-scoped roles (e.g. enhancer_finance_central):
+        // restrict to projects whose country_id is in the user's user_countries
+        // pivot. Global-scope roles (system_admin / board_supervisor /
+        // final_report_preparer) bypass this filter via hasGlobalDataScope().
+        $user = Auth::user();
+        if ($user instanceof User && ! $user->hasGlobalDataScope()) {
+            $allowedCountryIds = $user->allowedCountryIds();
+            $query->whereIn('country_id', $allowedCountryIds ?: [0]);
         }
 
         $stateColumn = $this->stateColumn();

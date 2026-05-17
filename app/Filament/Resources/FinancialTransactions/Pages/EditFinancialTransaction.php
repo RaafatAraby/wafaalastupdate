@@ -3,56 +3,29 @@
 namespace App\Filament\Resources\FinancialTransactions\Pages;
 
 use App\Filament\Resources\FinancialTransactions\FinancialTransactionResource;
-use Filament\Actions\Action;
-use Filament\Actions\DeleteAction;
-use Filament\Notifications\Notification;
+use App\Support\NumericNormalizer;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Enums\Width;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Model;
 
 class EditFinancialTransaction extends EditRecord
 {
     protected static string $resource = FinancialTransactionResource::class;
 
-    public function getMaxContentWidth(): Width
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        return Width::Full;
-    }
+        // Approval-related fields can only be changed by the workflow
+        // actions; ignore any value coming from the form.
+        unset(
+            $data['approval_status'],
+            $data['approved_by'],
+            $data['approved_at'],
+            $data['reviewed_by'],
+        );
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('removeAttachment')
-                ->label('حذف المرفق')
-                ->icon('heroicon-o-trash')
-                ->color('danger')
-                ->visible(fn (): bool => filled($this->record?->attachment_path))
-                ->requiresConfirmation()
-                ->modalHeading('تأكيد حذف المرفق')
-                ->modalDescription('سيتم حذف المرفق نهائياً. هل تريد المتابعة؟')
-                ->modalSubmitActionLabel('نعم، حذف')
-                ->modalCancelActionLabel('إلغاء')
-                ->action(fn () => $this->removeAttachmentFile()),
+        NumericNormalizer::apply($data, 'amount');
 
-            DeleteAction::make()->label('حذف الحركة'),
-        ];
-    }
+        $record->update($data);
 
-    protected function removeAttachmentFile(): void
-    {
-        $path = $this->record->attachment_path;
-
-        if (filled($path) && Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
-        }
-
-        $this->record->update([
-            'attachment_path' => null,
-        ]);
-
-        Notification::make()
-            ->title('تم حذف المرفق بنجاح')
-            ->success()
-            ->send();
+        return $record->fresh();
     }
 }

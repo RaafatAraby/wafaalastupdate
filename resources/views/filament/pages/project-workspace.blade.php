@@ -349,12 +349,14 @@
 
 {{-- ── KPI STRIP ───────────────────────────────────── --}}
 @php
+    $canSeeFinancials = $this->canSeeFinancials ?? true;
     $incoming = $this->financeSummary['incoming'];
     $outgoing = $this->financeSummary['outgoing'];
     $balance  = $this->financeSummary['balance'];
     $approved = (float)($project->approved_amount ?? 0);
     $burnPct  = $approved > 0 ? min(100, round($outgoing / $approved * 100)) : 0;
 @endphp
+@if($canSeeFinancials)
 <div class="pv-kpi">
     <div class="pv-kpi-card kpi-green">
         <div class="pv-kpi-icon">
@@ -389,6 +391,7 @@
         <div class="pv-kpi-sub">من الميزانية المعتمدة</div>
     </div>
 </div>
+@endif
 
 {{-- ── TABS ────────────────────────────────────────── --}}
 <div class="pv-tabs-wrap">
@@ -397,11 +400,13 @@
             <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
             البيانات الأساسية
         </button>
+        @if($canSeeFinancials)
         <button class="pv-tab-btn" onclick="pvTab(this,'tab-finance')" role="tab">
             <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
             الملخص المالي
             <span class="pv-tab-badge">{{ $project->financialTransactions->count() }}</span>
         </button>
+        @endif
       <button class="pv-tab-btn" onclick="pvTab(this,'tab-docs')" role="tab">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
     المرفقات
@@ -446,9 +451,19 @@
                             <span class="pv-kv-v">{{ $project->country->name_ar ?? '—' }}</span>
                         </div>
                         <div class="pv-kv-item">
-                            <span class="pv-kv-k">الجهة المنفذة</span>
+                            <span class="pv-kv-k">الجهة الممولة</span>
                             <span class="pv-kv-v">{{ $project->organization->name ?? '—' }}</span>
                         </div>
+                        <div class="pv-kv-item">
+                            <span class="pv-kv-k">عدد المستفيدين</span>
+                            <span class="pv-kv-v">{{ $project->beneficiaries_count !== null ? number_format($project->beneficiaries_count) : '—' }}</span>
+                        </div>
+                        @if(!empty($project->documentation_type))
+                        <div class="pv-kv-item">
+                            <span class="pv-kv-k">نوع التوثيق</span>
+                            <span class="pv-kv-v">{{ __('project.form.options.documentation_types.' . $project->documentation_type) }}</span>
+                        </div>
+                        @endif
                         <div class="pv-kv-item">
                             <span class="pv-kv-k">الوصف</span>
                             <span class="pv-kv-v" style="max-width:260px;white-space:normal;text-align:right">{{ $project->description ?: '—' }}</span>
@@ -510,6 +525,7 @@
         {{-- ──────────────────────────────────────────
              TAB 2: الملخص المالي
         ─────────────────────────────────────────── --}}
+        @if($canSeeFinancials)
         <div id="tab-finance" class="pv-panel">
             {{-- Infographic --}}
             <div class="pv-fin-infographic">
@@ -633,6 +649,7 @@
                 </table>
             </div>
         </div>
+        @endif
 
         {{-- ──────────────────────────────────────────
              TAB 3: المرفقات
@@ -697,14 +714,31 @@
                                         <div style="width:28px;height:28px;border-radius:6px;background:var(--info-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
                                             <svg width="14" height="14" fill="none" stroke="#185FA5" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
                                         </div>
-                                        <a href="{{ url('/admin/attachments/' . ($row['id'] ?? '') . '/edit') }}" target="_blank" class="pv-link" style="font-size:12px;font-weight:600;color:var(--info);">
-    {{ $row['original_name'] ?? '—' }}
-</a>
+                                        @if(!empty($row['id']))
+                                            <a href="{{ url('/admin/attachments/' . $row['id'] . '/edit') }}" target="_blank" class="pv-link" style="font-size:12px;font-weight:600;color:var(--info);">
+                                                {{ $row['original_name'] ?? '—' }}
+                                            </a>
+                                        @else
+                                            <span style="font-size:12px;font-weight:600;color:var(--text)">{{ $row['original_name'] ?? '—' }}</span>
+                                        @endif
+                                        @if(!empty($row['files_count']) && $row['files_count'] > 1)
+                                            <span class="pv-pill pv-pill-blue" style="font-size:10px">{{ $row['files_count'] }} ملفات</span>
+                                        @endif
                                     </div>
                                 </td>
                                 <td>
+                                    @php
+                                        $catLabels = [
+                                            'documentation' => 'توثيق',
+                                            'financial' => 'مرفق مالي',
+                                            'final_report' => 'تقرير نهائي',
+                                            'beneficiaries_sheet' => 'كشف مستفيدين',
+                                            'offer' => 'عرض سعر',
+                                            'other' => 'أخرى',
+                                        ];
+                                    @endphp
                                     @if(!empty($row['category']))
-                                        <span class="pv-pill pv-pill-gray" style="font-size:10px">{{ $row['category'] }}</span>
+                                        <span class="pv-pill pv-pill-gray" style="font-size:10px">{{ $catLabels[$row['category']] ?? $row['category'] }}</span>
                                     @else
                                         <span class="pv-muted">—</span>
                                     @endif
@@ -863,7 +897,14 @@
                     </div>
                     <div class="pv-act-body">
                         <div class="pv-act-event">
-                            <span class="pv-pill {{ $ec['pill'] }}" style="font-size:10px;margin-left:6px">{{ $row->event }}</span>
+                            @php
+                                $evtKey = 'activity_log.events.' . $row->event;
+                                $evtLabel = __($evtKey);
+                                if (! is_string($evtLabel) || $evtLabel === $evtKey) {
+                                    $evtLabel = $row->event;
+                                }
+                            @endphp
+                            <span class="pv-pill {{ $ec['pill'] }}" style="font-size:10px;margin-left:6px">{{ $evtLabel }}</span>
                             {{ $row->description }}
                         </div>
                         <div class="pv-act-time">{{ $row->causer->name ?? 'النظام' }} · {{ optional($row->created_at)->format('Y-m-d H:i') ?? '—' }}</div>

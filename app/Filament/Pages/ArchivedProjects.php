@@ -2,9 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\Role;
 use App\Models\Project;
+use App\Models\User;
 use BackedEnum;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use UnitEnum;
 
@@ -14,6 +17,21 @@ class ArchivedProjects extends Page
     protected static string|UnitEnum|null $navigationGroup = 'التحليلات والتقارير';
     protected static ?string $navigationLabel = 'أرشيف المشاريع';
     protected static ?int $navigationSort = 82;
+
+    /**
+     * Hidden from enhancer_entry_country.
+     */
+    public static function canAccess(): bool
+    {
+        $user = Auth::user();
+        return $user instanceof User
+            && ! $user->hasRole(Role::EnhancerEntryCountry->value);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canAccess();
+    }
 
     protected string $view = 'filament.pages.archived-projects';
 

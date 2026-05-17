@@ -38,6 +38,7 @@ class AdminPanelProvider extends PanelProvider
             // ─── الشعار (Logo) ───
             ->brandLogo(asset('/images/wafaa-logo.png'))
             ->brandLogoHeight('3rem')
+            ->favicon(asset('/images/wafaa-logo.png'))
             
             // ─── الخط والألوان (Font & Colors) ───
             ->font('Alexandria')
@@ -221,6 +222,11 @@ body { background: var(--bg-main) !important; color: var(--text-main) !important
 </style>
 HTML)
             )
+            // Enable Filament's bell icon (database notifications) so users
+            // see the alerts emitted by InternalNotifier as they happen.
+            // Polls every 30s to refresh unread count without a hard reload.
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

@@ -15,72 +15,70 @@ class ActivityLogsTable
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('created_at')
-                    ->label('التاريخ')
+                    ->label(__('activity_log.fields.date'))
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
 
                 TextColumn::make('project.project_number')
-                    ->label('رقم المشروع')
+                    ->label(__('activity_log.fields.project_number'))
                     ->searchable()
                     ->toggleable(),
 
                 TextColumn::make('project.title')
-                    ->label('المشروع')
+                    ->label(__('activity_log.fields.project'))
                     ->searchable()
                     ->wrap()
                     ->toggleable(),
 
                 TextColumn::make('event')
-                    ->label('الحدث')
+                    ->label(__('activity_log.fields.event'))
                     ->badge()
                     ->color('primary')
+                    // هذه الدالة الآن ستعمل بشكل سحري بفضل المصفوفة المتداخلة
+                    ->formatStateUsing(fn (?string $state) => $state ? __('activity_log.events.' . $state) : '-')
                     ->searchable(),
 
                 TextColumn::make('description')
-                    ->label('الوصف')
+                    ->label(__('activity_log.fields.description'))
                     ->wrap()
                     ->searchable(),
 
                 TextColumn::make('causer.name')
-                    ->label('بواسطة')
+                    ->label(__('activity_log.fields.causer'))
                     ->searchable()
-                    ->placeholder('النظام'),
+                    ->placeholder(__('activity_log.fields.system')),
 
                 TextColumn::make('subject_type')
-                    ->label('النوع')
+                    ->label(__('activity_log.fields.subject_type'))
                     ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'App\\Models\\Project' => 'مشروع',
-                        'App\\Models\\FinancialTransaction' => 'حركة مالية',
-                        'App\\Models\\Attachment' => 'مرفق',
+                        'App\\Models\\Project' => __('activity_log.subject_types.project'),
+                        'App\\Models\\FinancialTransaction' => __('activity_log.subject_types.financial_transaction'),
+                        'App\\Models\\Attachment' => __('activity_log.subject_types.attachment'),
                         default => $state ?: '-',
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('event')
-                    ->label('الحدث')
+                    ->label(__('activity_log.fields.event'))
+                    // ربط الفلتر مباشرة مع الكلمات المترجمة الجديدة
                     ->options([
-                        'project.created' => 'إنشاء مشروع',
-                        'project.updated' => 'تحديث مشروع',
-                        'financial.created' => 'إضافة حركة مالية',
-                        'financial.updated' => 'تعديل حركة مالية',
-                        'financial.deleted' => 'حذف حركة مالية',
-                        'attachment.created' => 'إضافة مرفق',
-                        'attachment.deleted' => 'حذف مرفق',
+                        'project.created' => __('activity_log.events.project.created'),
+                        'project.updated' => __('activity_log.events.project.updated'),
+                        'financial.created' => __('activity_log.events.financial.created'),
+                        'financial.updated' => __('activity_log.events.financial.updated'),
+                        'financial.deleted' => __('activity_log.events.financial.deleted'),
+                        'attachment.created' => __('activity_log.events.attachment.created'),
+                        'attachment.deleted' => __('activity_log.events.attachment.deleted'),
                     ]),
 
                 SelectFilter::make('project_id')
-                    ->label('المشروع')
+                    ->label(__('activity_log.fields.project'))
                     ->relationship('project', 'project_number'),
 
                 SelectFilter::make('causer_id')
-                    ->label('المستخدم')
+                    ->label(__('activity_log.fields.user'))
                     ->relationship('causer', 'name'),
-                    
-                    SelectFilter::make('project_id')
-    ->label('المشروع')
-    ->relationship('project', 'project_number'),
-
             ])
             ->recordActions([])
             ->toolbarActions([])

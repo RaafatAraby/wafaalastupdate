@@ -19,7 +19,9 @@ use UnitEnum;
 
 class DepartmentResource extends Resource
 {
+    
     protected static ?string $model = Department::class;
+    protected static bool $shouldRegisterNavigation = false;
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office';
     protected static string|UnitEnum|null $navigationGroup = 'إدارة النظام';
     protected static ?string $navigationLabel = 'الأقسام';

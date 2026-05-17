@@ -15,11 +15,31 @@ class ActivityLogResource extends Resource
 {
     protected static ?string $model = ActivityLog::class;
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clock';
-    protected static string|UnitEnum|null $navigationGroup = 'التحليلات والتقارير';
-    protected static ?string $navigationLabel = 'سجل العمليات';
-    protected static ?string $modelLabel = 'عملية';
-    protected static ?string $pluralModelLabel = 'سجل العمليات';
     protected static ?int $navigationSort = 81;
+
+    // ─── دوال الترجمة ───
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('activity_log.navigation.group');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('activity_log.navigation.label');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('activity_log.models.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('activity_log.models.plural');
+    }
+
+    // ──────────────────────
 
     public static function form(Schema $schema): Schema
     {
@@ -38,18 +58,4 @@ class ActivityLogResource extends Resource
         ];
     }
 
-    public static function canCreate(): bool
-    {
-        return false;
-    }
-
-    public static function canEdit($record): bool
-    {
-        return false;
-    }
-
-    public static function canDelete($record): bool
-    {
-        return false;
-    }
 }

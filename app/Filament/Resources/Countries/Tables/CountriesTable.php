@@ -16,17 +16,33 @@ class CountriesTable
             ->striped()
             ->paginated([10, 25, 50, 100])
             ->columns([
-                Tables\Columns\TextColumn::make('name_ar')->label('الدولة')->searchable(),
-                Tables\Columns\TextColumn::make('name_en')->label('English')->toggleable(),
-                Tables\Columns\TextColumn::make('iso2')->label('ISO')->badge(),
-                Tables\Columns\IconColumn::make('is_active')->label('فعالة')->boolean(),
-                Tables\Columns\TextColumn::make('sort_order')->label('الترتيب')->sortable(),
+                Tables\Columns\TextColumn::make('name_ar')
+                    ->label(__('country.form.fields.name_ar'))
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('name_en')
+                    ->label(__('country.form.fields.name_en'))
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('iso2')
+                    ->label(__('country.form.fields.iso2'))
+                    ->badge(),
+
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label(__('country.form.fields.is_active'))
+                    ->boolean(),
+
+                Tables\Columns\TextColumn::make('sort_order')
+                    ->label(__('country.form.fields.sort_order'))
+                    ->sortable(),
             ])
             ->filters([
-                SelectFilter::make('is_active')->label('الحالة')->options([
-                    '1' => 'فعالة',
-                    '0' => 'غير فعالة',
-                ]),
+                SelectFilter::make('is_active')
+                    ->label('الحالة')
+                    ->options([
+                        '1' => 'فعالة',
+                        '0' => 'غير فعالة',
+                    ]),
             ])
             ->recordActions([
                 EditAction::make(),

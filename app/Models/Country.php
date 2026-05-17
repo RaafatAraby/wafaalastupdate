@@ -26,4 +26,10 @@ class Country extends Model
     {
         return $this->hasMany(Project::class);
     }
+    
+    public function users()
+{
+    return $this->belongsToMany(\App\Models\User::class, 'user_countries');
+}
+
 }

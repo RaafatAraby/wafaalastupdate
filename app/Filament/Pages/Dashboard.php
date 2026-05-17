@@ -2,13 +2,17 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\Role;
 use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\FinancialTransaction;
 use App\Models\Project;
+use App\Models\User;
+use App\Services\ProjectAutoDelay;
 use BackedEnum;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use UnitEnum;
@@ -30,8 +34,34 @@ class Dashboard extends BaseDashboard
     public array $recentActivity = [];
     public array $topOrganizations = [];
 
+    /**
+     * When true, the dashboard renders a simple welcome message instead of
+     * the full statistics panel. Triggered for every role except
+     * system_admin and board_supervisor.
+     */
+    public bool $welcomeOnly = false;
+
     public function mount(): void
     {
+        // Piggy-back on dashboard page-load to lazily evaluate overdue
+        // projects — throttled internally to once per 6 hours.
+        ProjectAutoDelay::kick();
+
+        $user = Auth::user();
+        // أدوار ترى لوحة التحكم الإحصائية الكاملة:
+        //  - system_admin و board_supervisor: بيانات عالمية (كل الدول).
+        //  - enhancer_finance_central: نفس الويدجتس لكن مصفّاة بدولة/دول
+        //    المستخدم (عبر allowedCountryIds()).
+        $this->welcomeOnly = ! ($user && $user->hasAnyRole([
+            Role::SystemAdmin->value,
+            Role::BoardSupervisor->value,
+            Role::EnhancerFinanceCentral->value,
+        ]));
+
+        if ($this->welcomeOnly) {
+            return;
+        }
+
         $this->summary = $this->buildSummary();
         $this->stateDistribution = $this->buildStateDistribution();
         $this->documentationDistribution = $this->buildDocumentationDistribution();
@@ -46,11 +76,11 @@ class Dashboard extends BaseDashboard
         $projects = $this->baseProjectsQuery();
         $stateColumn = $this->stateColumn();
 
-        $incoming = (float) FinancialTransaction::query()
+        $incoming = (float) $this->scopedTransactionsQuery()
             ->where('transaction_type', 'incoming')
             ->sum('amount');
 
-        $outgoing = (float) FinancialTransaction::query()
+        $outgoing = (float) $this->scopedTransactionsQuery()
             ->where('transaction_type', 'outgoing')
             ->sum('amount');
 
@@ -59,8 +89,8 @@ class Dashboard extends BaseDashboard
             'active_projects' => (clone $projects)->whereNotIn($stateColumn, ['completed', 'closed'])->count(),
             'delayed_projects' => (clone $projects)->where($stateColumn, 'delayed')->count(),
             'undocumented_projects' => (clone $projects)->where('documentation_status', '!=', 'complete')->count(),
-            'attachments_count' => Attachment::query()->count(),
-            'transactions_count' => FinancialTransaction::query()->count(),
+            'attachments_count' => $this->scopedAttachmentsQuery()->count(),
+            'transactions_count' => $this->scopedTransactionsQuery()->count(),
             'incoming_total' => $incoming,
             'outgoing_total' => $outgoing,
             'balance' => $incoming - $outgoing,
@@ -115,7 +145,7 @@ class Dashboard extends BaseDashboard
             return [];
         }
 
-        return FinancialTransaction::query()
+        return $this->scopedTransactionsQuery()
             ->selectRaw("DATE_FORMAT(transaction_date, '%Y-%m') as month")
             ->selectRaw("SUM(CASE WHEN transaction_type = 'incoming' THEN amount ELSE 0 END) as incoming_total")
             ->selectRaw("SUM(CASE WHEN transaction_type = 'outgoing' THEN amount ELSE 0 END) as outgoing_total")
@@ -154,8 +184,14 @@ class Dashboard extends BaseDashboard
 
     protected function buildRecentActivity(): array
     {
+        $countryIds = $this->scopedCountryIds();
+
         return ActivityLog::query()
             ->with(['project', 'causer'])
+            ->when(
+                $countryIds !== null,
+                fn ($q) => $q->whereHas('project', fn ($p) => $p->whereIn('country_id', $countryIds ?: [0]))
+            )
             ->latest('id')
             ->limit(5)
             ->get()
@@ -172,6 +208,8 @@ class Dashboard extends BaseDashboard
 
     protected function buildTopOrganizations(): array
     {
+        $countryIds = $this->scopedCountryIds();
+
         return DB::table('projects')
             ->join('organizations', 'organizations.id', '=', 'projects.organization_id')
             ->when(
@@ -181,6 +219,10 @@ class Dashboard extends BaseDashboard
             ->when(
                 ! Schema::hasColumn('projects', 'is_archived') && Schema::hasColumn('projects', 'archived_at'),
                 fn ($query) => $query->whereNull('projects.archived_at')
+            )
+            ->when(
+                $countryIds !== null,
+                fn ($query) => $query->whereIn('projects.country_id', $countryIds ?: [0])
             )
             ->select('organizations.name', DB::raw('COUNT(projects.id) as total'))
             ->groupBy('organizations.name')
@@ -204,7 +246,64 @@ class Dashboard extends BaseDashboard
             $query->whereNull('archived_at');
         }
 
+        $countryIds = $this->scopedCountryIds();
+        if ($countryIds !== null) {
+            $query->whereIn('country_id', $countryIds ?: [0]);
+        }
+
         return $query;
+    }
+
+    /**
+     * جدول الحركات المالية مصفّى بالدول المسموحة للمستخدم الحالي. يعود
+     * بالبيانات العالمية للأدوار التي تملك hasGlobalDataScope().
+     */
+    protected function scopedTransactionsQuery(): Builder
+    {
+        $query = FinancialTransaction::query();
+        $countryIds = $this->scopedCountryIds();
+
+        if ($countryIds !== null) {
+            $query->whereHas('project', fn (Builder $q) => $q->whereIn('country_id', $countryIds ?: [0]));
+        }
+
+        return $query;
+    }
+
+    /**
+     * جدول المرفقات مصفّى بالدول المسموحة للمستخدم الحالي.
+     */
+    protected function scopedAttachmentsQuery(): Builder
+    {
+        $query = Attachment::query();
+        $countryIds = $this->scopedCountryIds();
+
+        if ($countryIds !== null) {
+            $query->whereHas('project', fn (Builder $q) => $q->whereIn('country_id', $countryIds ?: [0]));
+        }
+
+        return $query;
+    }
+
+    /**
+     * تعود بـ null إذا كان الدور غير مقيّد بدولة (system_admin أو
+     * board_supervisor — يرى الكل). وإلا تعود بمصفوفة معرفات الدول
+     * المسموحة. مصفوفة فارغة = المستخدم لا دولة له فيرى 0 سجلات.
+     *
+     * @return array<int, int>|null
+     */
+    protected function scopedCountryIds(): ?array
+    {
+        $user = Auth::user();
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        if ($user->hasGlobalDataScope()) {
+            return null;
+        }
+
+        return $user->allowedCountryIds();
     }
 
     protected function stateColumn(): string
@@ -241,16 +340,13 @@ class Dashboard extends BaseDashboard
 
     protected function eventLabel(string $event): string
     {
-        return [
-            'project.created' => 'إنشاء مشروع',
-            'project.updated' => 'تحديث مشروع',
-            'project.archived' => 'أرشفة مشروع',
-            'project.restored' => 'استعادة مشروع',
-            'financial.created' => 'إضافة حركة مالية',
-            'financial.updated' => 'تعديل حركة مالية',
-            'financial.deleted' => 'حذف حركة مالية',
-            'attachment.created' => 'إضافة مرفق',
-            'attachment.deleted' => 'حذف مرفق',
-        ][$event] ?? $event;
+        if ($event === '') {
+            return '-';
+        }
+
+        $key = 'activity_log.events.' . $event;
+        $translated = __($key);
+
+        return is_string($translated) && $translated !== $key ? $translated : $event;
     }
 }

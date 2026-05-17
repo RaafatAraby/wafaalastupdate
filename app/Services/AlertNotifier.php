@@ -29,8 +29,14 @@ class AlertNotifier
             'updated_at' => now(),
         ]);
 
-        self::sendEmail($title, $body, $severity);
-        self::sendWhatsApp($projectId, $type, $title, $body, $severity);
+        // Legacy email/WhatsApp paths kept for opt-in only. The per-event
+        // recipient matrix in App\Services\InternalNotifier already sends a
+        // branded email + WhatsApp via the self-hosted bridge. Set
+        // LEGACY_ALERT_CHANNELS=true in .env to re-enable these duplicates.
+        if ((bool) config('services.legacy_alert_channels', false)) {
+            self::sendEmail($title, $body, $severity);
+            self::sendWhatsApp($projectId, $type, $title, $body, $severity);
+        }
     }
 
     protected static function sendEmail(string $title, string $body, string $severity): void

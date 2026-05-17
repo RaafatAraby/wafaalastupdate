@@ -2,10 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\Permission;
+use App\Enums\Role;
 use App\Models\Attachment;
 use App\Models\Project;
 use BackedEnum;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use UnitEnum;
 
@@ -24,38 +27,66 @@ class ProjectWorkspace extends Page
     ];
     public array $projectAttachments = [];
 
+    /**
+     * Whether the current user can see the financial block on this page
+     * (summary + attachments that belong to financial transactions).
+     */
+    public bool $canSeeFinancials = false;
+
     public function mount(): void
     {
         $projectId = (int) request()->query('project_id');
 
         abort_unless($projectId > 0, 404);
 
-        $this->project = Project::query()
-            ->with([
-                'country',
-                'organization',
-                'financialTransactions',
-                'attachments',
-                'activityLogs.causer',
-                'stateHistories.user',
+        // الملخص المالي وكل تفاصيل الحركات المالية المتعلقة بالمشروع
+        // مرئية لـ: مدير النظام، مشرف المجلس، معد التقرير النهائي،
+        // أو لأي مستخدم مُنحت له صلاحية مباشرة `financial.view` من
+        // شاشة "صلاحيات إضافية" (تجاوز يدوي لقاعدة الإخفاء).
+        $user = Auth::user();
+        $this->canSeeFinancials = $user !== null && (
+            $user->hasAnyRole([
+                Role::SystemAdmin->value,
+                Role::BoardSupervisor->value,
+                Role::FinalReportPreparer->value,
             ])
+            || $user->hasDirectPermission(Permission::FinancialView->value)
+        );
+
+        $relations = [
+            'country',
+            'organization',
+            'attachments',
+            'activityLogs.causer',
+            'stateHistories.user',
+        ];
+        if ($this->canSeeFinancials) {
+            $relations[] = 'financialTransactions';
+        }
+
+        $this->project = Project::query()
+            ->with($relations)
             ->findOrFail($projectId);
 
-        $incoming = (float) $this->project->financialTransactions
-            ->where('transaction_type', 'incoming')
-            ->sum('amount');
+        if ($this->canSeeFinancials) {
+            $incoming = (float) $this->project->financialTransactions
+                ->where('transaction_type', 'incoming')
+                ->sum('amount');
 
-        $outgoing = (float) $this->project->financialTransactions
-            ->where('transaction_type', 'outgoing')
-            ->sum('amount');
+            $outgoing = (float) $this->project->financialTransactions
+                ->where('transaction_type', 'outgoing')
+                ->sum('amount');
 
-        $this->financeSummary = [
-            'incoming' => $incoming,
-            'outgoing' => $outgoing,
-            'balance' => $incoming - $outgoing,
-        ];
+            $this->financeSummary = [
+                'incoming' => $incoming,
+                'outgoing' => $outgoing,
+                'balance' => $incoming - $outgoing,
+            ];
 
-        $transactionIds = $this->project->financialTransactions->pluck('id')->filter()->values();
+            $transactionIds = $this->project->financialTransactions->pluck('id')->filter()->values();
+        } else {
+            $transactionIds = collect();
+        }
 
         $this->projectAttachments = Attachment::query()
             ->with(['financialTransaction', 'uploadedBy'])
@@ -70,8 +101,10 @@ class ProjectWorkspace extends Page
             ->get()
             ->map(function (Attachment $attachment): array {
                 return [
+                    'id' => $attachment->id,
                     'original_name' => $attachment->original_name,
                     'category' => $attachment->category,
+                    'files_count' => $attachment->files_count,
                     'created_at' => optional($attachment->created_at)?->format('Y-m-d H:i') ?? '-',
                     'transaction_ref' => $attachment->financialTransaction?->reference_no ?: null,
                     'transaction_type' => $attachment->financialTransaction?->transaction_type ?: null,

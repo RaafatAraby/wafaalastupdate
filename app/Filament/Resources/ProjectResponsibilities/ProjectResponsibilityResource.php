@@ -123,8 +123,4 @@ class ProjectResponsibilityResource extends Resource
         ];
     }
 
-    public static function canViewAny(): bool
-    {
-        return false;
-    }
 }

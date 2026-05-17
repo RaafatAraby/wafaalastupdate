@@ -2,10 +2,13 @@
 
 namespace App\Filament\Resources\Organizations\Tables;
 
+use App\Models\Organization;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Tables;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class OrganizationsTable
 {
@@ -21,12 +24,12 @@ class OrganizationsTable
             ->persistSortInSession()
             ->columns([
                 Tables\Columns\TextColumn::make('organization_code')
-                    ->label('رمز الجهة')
+                    ->label('رمز الجهة الممولة')
                     ->searchable()
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('name')
-                    ->label('الجهة')
+                    ->label('الجهة الممولة')
                     ->searchable()
                     ->sortable(),
 
@@ -40,7 +43,7 @@ class OrganizationsTable
                     ->boolean(),
             ])
             ->filters([
-                SelectFilter::make('entity_type')->label('نوع الجهة')->options([
+                SelectFilter::make('entity_type')->label('نوع الجهة الممولة')->options([
                     'institution' => 'مؤسسة',
                     'individual' => 'فرد',
                 ]),
@@ -51,6 +54,13 @@ class OrganizationsTable
             ])
             ->recordActions([
                 EditAction::make(),
+                DeleteAction::make()
+                    ->label('حذف')
+                    ->requiresConfirmation()
+                    ->modalHeading('حذف الجهة')
+                    ->modalDescription('سيتم حذف الجهة نهائياً. لا يمكن التراجع عن هذه العملية.')
+                    ->modalSubmitActionLabel('نعم، حذف')
+                    ->visible(fn (Organization $record): bool => Auth::user()?->can('delete', $record) ?? false),
             ]);
     }
 }

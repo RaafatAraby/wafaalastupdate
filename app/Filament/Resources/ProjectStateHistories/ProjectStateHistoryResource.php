@@ -16,58 +16,104 @@ class ProjectStateHistoryResource extends Resource
 {
     protected static ?string $model = ProjectStateHistory::class;
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-arrows-right-left';
-    protected static string|UnitEnum|null $navigationGroup = 'إدارة التشغيل';
-    protected static ?string $navigationLabel = 'سجل الحالات';
-    protected static ?string $modelLabel = 'حركة حالة';
-    protected static ?string $pluralModelLabel = 'سجل الحالات';
     protected static ?int $navigationSort = 31;
+
+    // ─── دوال الترجمة للقوائم والعناوين ───
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('project.navigation.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('project.navigation.state_history');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('project.models.state_history');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('project.models.state_history_plural');
+    }
+
+    // ────────────────────────────────────────
 
     public static function form(Schema $schema): Schema
     {
         return $schema;
     }
 
-    public static function table(Table $table): Table
+ public static function table(Table $table): Table
     {
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('project.project_number')
-                    ->label('رقم المشروع')
+                    ->label(__('project.fields.project_number'))
                     ->searchable(),
 
                 TextColumn::make('project.title')
-                    ->label('المشروع')
+                    ->label(__('project.fields.project'))
                     ->searchable()
                     ->wrap(),
 
                 TextColumn::make('from_state')
-                    ->label('من حالة')
+                    ->label(__('project.fields.from_state'))
                     ->badge()
-                    ->placeholder('-'),
+                    // التعديل هنا: قراءة الترجمة من ملف اللغة
+                    ->formatStateUsing(fn (?string $state) => $state ? __('project.form.options.states.' . $state) : '-')
+                    // إضافة الألوان المناسبة لكل حالة
+                    ->color(fn (?string $state) => match ($state) {
+                        'new' => 'gray',
+                        'pending_readiness' => 'warning',
+                        'ready_for_execution' => 'info',
+                        'in_execution' => 'primary',
+                        'pending_documentation' => 'warning',
+                        'delayed' => 'danger',
+                        'completed' => 'success',
+                        'closed' => 'gray',
+                        default => 'gray',
+                    }),
 
                 TextColumn::make('to_state')
-                    ->label('إلى حالة')
+                    ->label(__('project.fields.to_state'))
                     ->badge()
-                    ->color('success'),
+                    // التعديل هنا: قراءة الترجمة من ملف اللغة
+                    ->formatStateUsing(fn (?string $state) => $state ? __('project.form.options.states.' . $state) : '-')
+                    // إضافة الألوان المناسبة لكل حالة
+                    ->color(fn (?string $state) => match ($state) {
+                        'new' => 'gray',
+                        'pending_readiness' => 'warning',
+                        'ready_for_execution' => 'info',
+                        'in_execution' => 'primary',
+                        'pending_documentation' => 'warning',
+                        'delayed' => 'danger',
+                        'completed' => 'success',
+                        'closed' => 'gray',
+                        default => 'success',
+                    }),
 
                 TextColumn::make('user.name')
-                    ->label('بواسطة')
+                    ->label(__('project.fields.by_user'))
                     ->placeholder('-'),
 
                 TextColumn::make('notes')
-                    ->label('ملاحظات')
+                    ->label(__('project.fields.notes'))
                     ->wrap()
                     ->placeholder('-'),
 
                 TextColumn::make('created_at')
-                    ->label('التاريخ')
+                    ->label(__('project.fields.date'))
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('project_id')
-                    ->label('المشروع')
+                    ->label(__('project.fields.project'))
                     ->relationship('project', 'project_number')
                     ->searchable()
                     ->preload(),
@@ -84,18 +130,4 @@ class ProjectStateHistoryResource extends Resource
         ];
     }
 
-    public static function canCreate(): bool
-    {
-        return false;
-    }
-
-    public static function canEdit($record): bool
-    {
-        return false;
-    }
-
-    public static function canDelete($record): bool
-    {
-        return false;
-    }
 }

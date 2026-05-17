@@ -5,3 +5,4 @@
 [06-Apr-2026 11:42:54 UTC] PHP Fatal error:  Cannot redeclare App\Models\Department::users() in /home/ihvihkli/system.wp-ar.net/app/Models/Department.php on line 20
 [06-Apr-2026 11:42:55 UTC] PHP Fatal error:  Cannot redeclare App\Models\Department::users() in /home/ihvihkli/system.wp-ar.net/app/Models/Department.php on line 20
 [06-Apr-2026 12:35:30 UTC] PHP Fatal error:  Cannot declare class App\Filament\Resources\Projects\Pages\ListProjects, because the name is already in use in /home/ihvihkli/system.wp-ar.net/app/Filament/Resources/Projects/Tables/ProjectsTable.php on line 13
+[25-Apr-2026 18:40:06 UTC] PHP Fatal error:  Cannot make static method Illuminate\Database\Eloquent\Model::hasGlobalScope() non static in class App\Models\User in /home/ihvihkli/system.wp-ar.net/app/Models/User.php on line 56

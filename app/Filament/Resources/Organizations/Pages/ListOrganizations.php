@@ -13,7 +13,7 @@ class ListOrganizations extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('إضافة جهة'),
+            Actions\CreateAction::make()->label('إضافة جهة ممولة'),
         ];
     }
 }

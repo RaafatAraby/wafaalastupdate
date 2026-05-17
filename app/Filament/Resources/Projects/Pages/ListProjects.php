@@ -3,12 +3,11 @@
 namespace App\Filament\Resources\Projects\Pages;
 
 use App\Filament\Resources\Projects\ProjectResource;
-use App\Models\Project;
+use Closure;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 
 class ListProjects extends ListRecords
 {
@@ -17,75 +16,100 @@ class ListProjects extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('إضافة مشروع'),
+            Actions\CreateAction::make()->label(__('project.actions.create')),
         ];
     }
 
     public function getTabs(): array
     {
-        $tab = $this->resolveTabClass();
-        $stateColumn = Schema::hasColumn('projects', 'status') ? 'status' : 'state';
-        $base = fn (): Builder => $this->baseQuery();
+        $tabClass = $this->resolveTabClass();
+        if (! $tabClass) {
+            return [];
+        }
 
-        return [
-            'all' => $tab::make('الكل')
-                ->badge($base()->count()),
+        $state = $this->stateColumn();
 
-            'new' => $tab::make('جديد')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where($stateColumn, 'new'))
-                ->badge($base()->where($stateColumn, 'new')->count()),
-
-            'pending_readiness' => $tab::make('بانتظار الجاهزية')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where($stateColumn, 'pending_readiness'))
-                ->badge($base()->where($stateColumn, 'pending_readiness')->count()),
-
-            'ready_for_execution' => $tab::make('جاهز للتنفيذ')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where($stateColumn, 'ready_for_execution'))
-                ->badge($base()->where($stateColumn, 'ready_for_execution')->count()),
-
-            'in_execution' => $tab::make('قيد التنفيذ')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where($stateColumn, 'in_execution'))
-                ->badge($base()->where($stateColumn, 'in_execution')->count()),
-
-            'delayed' => $tab::make('متأخرة')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where($stateColumn, 'delayed'))
-                ->badge($base()->where($stateColumn, 'delayed')->count()),
-
-            'undocumented' => $tab::make('غير موثقة')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('documentation_status', '!=', 'complete'))
-                ->badge($base()->where('documentation_status', '!=', 'complete')->count()),
-
-            'completed' => $tab::make('مكتملة')
-                ->modifyQueryUsing(fn (Builder $query) => $query->whereIn($stateColumn, ['completed', 'closed']))
-                ->badge($base()->whereIn($stateColumn, ['completed', 'closed'])->count()),
-        ];
+        return array_filter([
+            'all' => $this->makeTab(__('project.tabs.all'), null, $this->baseQuery()->count()),
+            'new' => $this->makeTab(
+                __('project.form.options.states.new'),
+                fn (Builder $q) => $q->where($state, 'new'),
+                $this->baseQuery()->where($state, 'new')->count()
+            ),
+            'pending_readiness' => $this->makeTab(
+                __('project.form.options.states.pending_readiness'),
+                fn (Builder $q) => $q->where($state, 'pending_readiness'),
+                $this->baseQuery()->where($state, 'pending_readiness')->count()
+            ),
+            'ready_for_execution' => $this->makeTab(
+                __('project.form.options.states.ready_for_execution'),
+                fn (Builder $q) => $q->where($state, 'ready_for_execution'),
+                $this->baseQuery()->where($state, 'ready_for_execution')->count()
+            ),
+            'in_execution' => $this->makeTab(
+                __('project.form.options.states.in_execution'),
+                fn (Builder $q) => $q->where($state, 'in_execution'),
+                $this->baseQuery()->where($state, 'in_execution')->count()
+            ),
+            'delayed' => $this->makeTab(
+                __('project.form.options.states.delayed'),
+                fn (Builder $q) => $q->where($state, 'delayed'),
+                $this->baseQuery()->where($state, 'delayed')->count()
+            ),
+            'undocumented' => $this->makeTab(
+                __('project.tabs.undocumented'),
+                fn (Builder $q) => $q->where('documentation_status', '!=', 'complete'),
+                $this->baseQuery()->where('documentation_status', '!=', 'complete')->count()
+            ),
+            'completed' => $this->makeTab(
+                __('project.form.options.states.completed'),
+                fn (Builder $q) => $q->where($state, 'completed'),
+                $this->baseQuery()->where($state, 'completed')->count()
+            ),
+        ]);
     }
 
     protected function baseQuery(): Builder
     {
-        $query = Project::query();
-
-        if (Schema::hasColumn('projects', 'is_archived')) {
-            $query->where('is_archived', false);
-        } elseif (Schema::hasColumn('projects', 'archived_at')) {
-            $query->whereNull('archived_at');
-        }
-
-        return $query;
+        return static::getResource()::getEloquentQuery();
     }
 
-    protected function resolveTabClass(): string
+    protected function stateColumn(): string
+    {
+        return Schema::hasColumn('projects', 'status') ? 'status' : 'state';
+    }
+
+    protected function resolveTabClass(): ?string
     {
         foreach ([
-            \Filament\Schemas\Components\Tabs\Tab::class,
             \Filament\Resources\Components\Tab::class,
-            \Filament\Resources\Pages\ListRecords\Tab::class,
+            'Filament\\Resources\\Pages\\ListRecords\\Tab',
         ] as $class) {
             if (class_exists($class)) {
                 return $class;
             }
         }
 
-        throw new RuntimeException('Filament Tab class not found for this version.');
+        return null;
+    }
+
+    protected function makeTab(string $label, ?Closure $query = null, ?int $badge = null): mixed
+    {
+        $tabClass = $this->resolveTabClass();
+        if (! $tabClass) {
+            return null;
+        }
+
+        $tab = $tabClass::make($label);
+
+        if ($query && method_exists($tab, 'modifyQueryUsing')) {
+            $tab = $tab->modifyQueryUsing($query);
+        }
+
+        if ($badge !== null && method_exists($tab, 'badge')) {
+            $tab = $tab->badge($badge);
+        }
+
+        return $tab;
     }
 }

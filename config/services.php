@@ -1,17 +1,10 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
     |--------------------------------------------------------------------------
-    |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
-    |
     */
 
     'postmark' => [
@@ -35,4 +28,26 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | WhatsApp Bridge (self-hosted Node.js + Baileys)
+    |--------------------------------------------------------------------------
+    */
+    'whatsapp' => [
+        'url' => env('WHATSAPP_BRIDGE_URL'),
+        'key' => env('WHATSAPP_BRIDGE_KEY'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy alert channels
+    |--------------------------------------------------------------------------
+    |
+    | When true, AlertNotifier will also send the legacy email + WhatsApp
+    | duplicates alongside the per-event recipient matrix in
+    | App\Services\InternalNotifier. Read via config() so it survives
+    | config:cache (env() returns null in cached-config environments).
+    |
+    */
+    'legacy_alert_channels' => env('LEGACY_ALERT_CHANNELS', false),
 ];

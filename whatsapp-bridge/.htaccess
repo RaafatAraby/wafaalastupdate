@@ -1,0 +1,13 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/ihvihkli/whatsapp-bridge"
+PassengerBaseURI "/whatsapp-bridge"
+PassengerNodejs "/home/ihvihkli/nodevenv/whatsapp-bridge/20/bin/node"
+PassengerAppType node
+PassengerStartupFile server.js
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+SetEnv API_KEY 23e8a45767898c61a0053054150d3f9ab2602a95397844336e9f5cab61ce2f9a
+SetEnv BASE_PATH /whatsapp-bridge
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END

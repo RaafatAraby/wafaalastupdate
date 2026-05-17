@@ -20,7 +20,7 @@ class OrganizationForm
                 ->schema([
                     Grid::make(2)->schema([
                         TextInput::make('organization_code')
-                            ->label('رمز الجهة')
+                            ->label('رمز الجهة الممولة')
                             ->required()
                             ->maxLength(50)
                             ->unique(ignoreRecord: true)
@@ -28,14 +28,14 @@ class OrganizationForm
                             ->dehydrateStateUsing(fn (?string $state) => $state ? strtoupper(trim($state)) : null),
 
                         TextInput::make('name')
-                            ->label('اسم الجهة')
+                            ->label('اسم الجهة الممولة')
                             ->required()
                             ->maxLength(255),
                     ]),
 
                     Grid::make(2)->schema([
                         Select::make('entity_type')
-                            ->label('نوع الجهة')
+                            ->label('نوع الجهة الممولة')
                             ->options([
                                 'institution' => 'مؤسسة',
                                 'individual' => 'فرد',

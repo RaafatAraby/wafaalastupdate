@@ -2,27 +2,44 @@
 
 namespace App\Filament\Resources\Projects;
 
-use App\Filament\Resources\Projects\Pages\CreateProject;
-use App\Filament\Resources\Projects\Pages\EditProject;
-use App\Filament\Resources\Projects\Pages\ListProjects;
+use App\Filament\Resources\Projects\Pages;
 use App\Filament\Resources\Projects\Schemas\ProjectForm;
 use App\Filament\Resources\Projects\Tables\ProjectsTable;
 use App\Models\Project;
-use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
-use UnitEnum;
+use Illuminate\Database\Eloquent\Builder;
 
+/**
+ * Authorization is delegated to App\Policies\ProjectPolicy.
+ *
+ * Country scoping is centralised on the model via ScopesByCountry::visibleTo,
+ * so the eloquent query for the listing inherits the same rules as direct
+ * record access.
+ */
 class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-briefcase';
-    protected static string|UnitEnum|null $navigationGroup = 'إدارة التشغيل';
-    protected static ?string $navigationLabel = 'المشاريع';
-    protected static ?string $modelLabel = 'مشروع';
-    protected static ?string $pluralModelLabel = 'المشاريع';
-    protected static ?int $navigationSort = 20;
+
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-briefcase';
+
+    protected static ?int $navigationSort = 2;
+
+    public static function getNavigationLabel(): string
+    {
+        return __('project.navigation.projects');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('project.models.project');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('project.models.project_plural');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -34,17 +51,22 @@ class ProjectResource extends Resource
         return ProjectsTable::configure($table);
     }
 
+    public static function getRelations(): array
+    {
+        return [];
+    }
+
     public static function getPages(): array
     {
         return [
-            'index' => ListProjects::route('/'),
-            'create' => CreateProject::route('/create'),
-            'edit' => EditProject::route('/{record}/edit'),
+            'index' => Pages\ListProjects::route('/'),
+            'create' => Pages\CreateProject::route('/create'),
+            'edit' => Pages\EditProject::route('/{record}/edit'),
         ];
     }
 
-    public static function getNavigationBadge(): ?string
+    public static function getEloquentQuery(): Builder
     {
-        return (string) Project::query()->count();
+        return parent::getEloquentQuery()->visibleTo(auth()->user());
     }
 }

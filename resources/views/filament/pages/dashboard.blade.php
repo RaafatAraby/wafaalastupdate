@@ -35,14 +35,29 @@
         .db-card-value{font-size:1.8rem;font-weight:900;color:#0f172a;margin-top:8px}
         .db-card-note{font-size:.83rem;color:#7b8794;margin-top:4px}
         .db-panels{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+        .db-panels > *{min-width:0}
         .db-panel{
             background:#fff;border:1px solid #e1ece5;border-radius:24px;padding:18px;
-            box-shadow:0 12px 30px rgba(15,23,42,.04)
+            box-shadow:0 12px 30px rgba(15,23,42,.04);
+            position:relative;
+            overflow:hidden;
         }
         .db-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
         .db-panel-title{font-size:1.05rem;font-weight:900;color:#0f172a;margin:0}
         .db-panel-link{font-size:.88rem;color:#167b44;text-decoration:none;font-weight:800}
-        .db-canvas{height:280px}
+        .db-canvas{
+            height:280px;
+            width:100%;
+            min-width:0;
+            position:relative;
+            overflow:hidden;
+        }
+        .db-canvas canvas{
+            display:block !important;
+            width:100% !important;
+            max-width:100% !important;
+            height:100% !important;
+        }
         .db-list{display:flex;flex-direction:column;gap:10px}
         .db-link-card{
             display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
@@ -90,6 +105,18 @@
         $maxOrg = max(1, collect($topOrganizations)->max('total') ?: 1);
     @endphp
 
+    @if($welcomeOnly ?? false)
+        <div class="db-wrap">
+            <section class="db-hero" style="padding:60px 30px">
+                <div style="text-align:center">
+                    <div class="db-kicker" style="font-size:14px">أهلاً وسهلاً</div>
+                    <h1 class="db-title" style="font-size:2.2rem;margin:20px 0 14px">مرحباً بك في نظام وفاء المحسنين</h1>
+                    <div class="db-sub" style="margin:0 auto;font-size:1.05rem">استخدم القائمة الجانبية للانتقال إلى الأقسام المتاحة لصلاحيتك.</div>
+                </div>
+            </section>
+        </div>
+    @else
+
     <div class="db-wrap">
         <section class="db-hero">
             <div class="db-hero-grid">
@@ -100,7 +127,7 @@
 
                     <div class="db-actions">
                         <a class="db-btn db-btn-primary" href="/admin/projects">إدارة المشاريع</a>
-                        <a class="db-btn db-btn-soft" href="/admin/financial-transactions">الحركات المالية</a>
+                        @if(\App\Filament\Resources\FinancialTransactions\FinancialTransactionResource::canAccess())<a class="db-btn db-btn-soft" href="/admin/financial-transactions">الحركات المالية</a>@endif
                         <a class="db-btn db-btn-soft" href="/admin/reports">التقارير</a>
                     </div>
                 </div>
@@ -194,7 +221,7 @@
 
             <div class="db-panel">
                 <div class="db-panel-head">
-                    <h3 class="db-panel-title">أكثر الجهات نشاطًا</h3>
+                    <h3 class="db-panel-title">أكثر الجهات الممولة نشاطًا</h3>
                 </div>
 
                 <div class="db-bars">
@@ -315,10 +342,20 @@
                         ]
                     },
                     options: {
+                        responsive: true,
                         maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 8,
+                                right: 8,
+                                bottom: 8,
+                                left: 8
+                            }
+                        },
                         plugins: {
                             legend: {
                                 position: 'top',
+                                rtl: true,
                                 labels: { usePointStyle: true, font: { family: 'Alexandria', size: 12 } }
                             }
                         },
@@ -343,11 +380,21 @@
                         }]
                     },
                     options: {
+                        responsive: true,
                         maintainAspectRatio: false,
                         cutout: '72%',
+                        layout: {
+                            padding: {
+                                top: 8,
+                                right: 8,
+                                bottom: 8,
+                                left: 8
+                            }
+                        },
                         plugins: {
                             legend: {
                                 position: 'bottom',
+                                rtl: true,
                                 labels: { font: { family: 'Alexandria', size: 12 }, usePointStyle: true }
                             }
                         }
@@ -356,4 +403,5 @@
             }
         })();
     </script>
+    @endif
 </x-filament-panels::page>
