@@ -29,12 +29,20 @@ return [
             'transfer_method'          => 'طريقة التحويل',
             'bank_name'                => 'اسم البنك',
             'category'                 => 'التصنيف',
-            'amount'                   => 'المبلغ',
+            'amount'                   => 'المبلغ بالدولار (USD)',
+            'currency'                 => 'العملة',
+            'original_amount'          => 'المبلغ بالعملة الأصلية',
+            'exchange_rate'            => 'سعر الصرف (مقابل الدولار)',
             'transaction_date'         => 'تاريخ الحركة',
             'notes'                    => 'ملاحظات',
             'approval_notes'           => 'ملاحظات الاعتماد',
             'approval_status'          => 'حالة الاعتماد',
             'attachment'               => 'ملف مرفق',
+        ],
+
+        'help' => [
+            'exchange_rate'  => 'يُحدَّث تلقائياً عند تغيير العملة. يمكن تعديله يدوياً عند الحاجة.',
+            'amount_usd'     => 'يُحتسب تلقائياً من المبلغ الأصلي × سعر الصرف.',
         ],
 
         'options' => [

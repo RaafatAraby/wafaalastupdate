@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Projects\Pages;
 use App\Filament\Resources\Projects\ProjectResource;
 use App\Filament\Resources\Projects\Schemas\ProjectForm;
 use App\Models\Attachment;
+use App\Models\ProjectPayment;
 use App\Support\NumericNormalizer;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Schema;
@@ -25,6 +26,15 @@ class CreateProject extends CreateRecord
      */
     protected array $pendingProjectFiles = [];
 
+    /**
+     * Payment schedule rows captured from the create form, normalised
+     * and ready to be persisted as ProjectPayment records once the
+     * project itself exists.
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    protected array $pendingPayments = [];
+
     public function getMaxContentWidth(): Width
     {
         return Width::Full;
@@ -43,6 +53,12 @@ class CreateProject extends CreateRecord
         $files = array_values(array_filter(Arr::wrap($this->data['project_files'] ?? [])));
         $this->pendingProjectFiles = array_map(fn ($f) => (string) $f, $files);
 
+        // The Repeater is `dehydrated(false)`, so payment rows arrive on the
+        // live form state but never inside $data. Normalise them now and
+        // persist after the project row is created (see afterCreate()).
+        $paymentRows = Arr::wrap($this->data['payments_schedule'] ?? []);
+        $this->pendingPayments = ProjectForm::normalisePaymentRows($paymentRows);
+
         $data['created_by'] = Auth::id();
         $data['updated_by'] = Auth::id();
         $data['funder_organization_id'] = $data['organization_id'] ?? null;
@@ -50,7 +66,7 @@ class CreateProject extends CreateRecord
         NumericNormalizer::apply($data, 'approved_amount');
         NumericNormalizer::apply($data, 'beneficiaries_count');
 
-        unset($data['project_files']);
+        unset($data['project_files'], $data['payments_schedule']);
 
         return $data;
     }
@@ -64,7 +80,17 @@ class CreateProject extends CreateRecord
      */
     protected function afterCreate(): void
     {
-        if (empty($this->pendingProjectFiles) || ! $this->record) {
+        if (! $this->record) {
+            return;
+        }
+
+        $this->persistPendingAttachments();
+        $this->persistPendingPayments();
+    }
+
+    protected function persistPendingAttachments(): void
+    {
+        if (empty($this->pendingProjectFiles)) {
             return;
         }
 
@@ -87,5 +113,20 @@ class CreateProject extends CreateRecord
         Attachment::query()->create($payload);
 
         $this->pendingProjectFiles = [];
+    }
+
+    protected function persistPendingPayments(): void
+    {
+        if (empty($this->pendingPayments)) {
+            return;
+        }
+
+        foreach ($this->pendingPayments as $row) {
+            $row['project_id'] = $this->record->id;
+            $row['created_by'] = Auth::id();
+            ProjectPayment::query()->create($row);
+        }
+
+        $this->pendingPayments = [];
     }
 }

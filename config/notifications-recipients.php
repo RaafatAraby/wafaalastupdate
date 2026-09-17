@@ -135,6 +135,27 @@ return [
             'board_supervisor',
             'project_creator',
         ],
+
+        // ─── Project payment schedule reminders ─────────────────────────
+        // Dispatched by the `payments:check-due` console command when the
+        // due_date of a pending ProjectPayment row arrives (or is within
+        // the configured look-ahead window). Targets the people who have
+        // visibility on the project's finances. project_executor and
+        // enhancer_finance_central are country-scoped.
+        'payment.due_reminder' => [
+            'system_admin',
+            'board_supervisor',
+            'project_creator',
+            'project_executor',
+            'enhancer_finance_central',
+        ],
+        'payment.overdue' => [
+            'system_admin',
+            'board_supervisor',
+            'project_creator',
+            'project_executor',
+            'enhancer_finance_central',
+        ],
     ],
 
     /**

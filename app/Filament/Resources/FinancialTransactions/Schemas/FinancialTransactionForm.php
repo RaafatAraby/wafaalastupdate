@@ -5,14 +5,16 @@ namespace App\Filament\Resources\FinancialTransactions\Schemas;
 use App\Models\Country;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Services\ExchangeRateService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Components\Utilities\Get;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
 
@@ -141,12 +143,59 @@ class FinancialTransactionForm
                 'other' => __('financial_transaction.form.options.categories.other'),
             ]),
 
-            TextInput::make('amount')
-                ->label(__('financial_transaction.form.fields.amount'))
+            Select::make('currency')
+                ->label(__('financial_transaction.form.fields.currency'))
+                ->options(app(ExchangeRateService::class)->currencyOptions())
+                ->default('USD')
+                ->required()
+                ->live()
+                ->native(false)
+                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                    $original = (float) ($get('original_amount') ?? 0);
+                    $rate = app(ExchangeRateService::class)->rateToUsd((string) ($state ?: 'USD'));
+                    $set('exchange_rate', $rate);
+                    $set('amount', round($original * $rate, 2));
+                }),
+
+            TextInput::make('original_amount')
+                ->label(__('financial_transaction.form.fields.original_amount'))
                 ->numeric()
                 ->step(0.01)
                 ->minValue(0)
                 ->required()
+                ->live(onBlur: true)
+                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal'])
+                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                    $rate = (float) ($get('exchange_rate') ?? app(ExchangeRateService::class)->rateToUsd((string) ($get('currency') ?: 'USD')));
+                    $set('exchange_rate', $rate);
+                    $set('amount', round(((float) $state) * $rate, 2));
+                }),
+
+            TextInput::make('exchange_rate')
+                ->label(__('financial_transaction.form.fields.exchange_rate'))
+                ->helperText(__('financial_transaction.form.help.exchange_rate'))
+                ->numeric()
+                ->step(0.000001)
+                ->minValue(0)
+                ->default(1)
+                ->dehydrated()
+                ->live(onBlur: true)
+                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal'])
+                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                    $original = (float) ($get('original_amount') ?? 0);
+                    $rate = (float) ($state ?: 1);
+                    $set('amount', round($original * $rate, 2));
+                }),
+
+            TextInput::make('amount')
+                ->label(__('financial_transaction.form.fields.amount'))
+                ->helperText(__('financial_transaction.form.help.amount_usd'))
+                ->numeric()
+                ->step(0.01)
+                ->minValue(0)
+                ->required()
+                ->readOnly()
+                ->dehydrated()
                 ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal']),
 
             DatePicker::make('transaction_date')
@@ -189,6 +238,13 @@ class FinancialTransactionForm
             'بنك الإسكان' => 'بنك الإسكان',
             'بنك القاهرة عمان' => 'بنك القاهرة عمان',
             'بنك الأردن' => 'بنك الأردن',
+       'بنك الإستثمار' => 'بنك الإستثمار',
+'İş bankası' => 'İş bankası',
+'Ziraat bankası' => 'Ziraat bankası',
+'Ziraat katılım' => 'Ziraat katılım',
+'Vakıf katılım' => 'Vakıf katılım',
+'Al-baraka' => 'Al-baraka',
+'Kuveyt Turk' => 'Kuveyt Turk',
             'أخرى' => 'أخرى',
         ];
     }
@@ -278,6 +334,7 @@ class FinancialTransactionForm
         $list = (array) config('world_countries', []);
         // Display is already Arabic names; sort by value.
         asort($list, SORT_NATURAL | SORT_FLAG_CASE);
+
         return $list;
     }
 
@@ -301,7 +358,7 @@ class FinancialTransactionForm
             ->orderBy($titleColumn)
             ->get()
             ->mapWithKeys(fn (Project $project) => [
-                $project->getKey() => trim(($project->project_number ? $project->project_number . ' - ' : '') . ($project->{$titleColumn} ?? ''))
+                $project->getKey() => trim(($project->project_number ? $project->project_number.' - ' : '').($project->{$titleColumn} ?? '')),
             ])
             ->toArray();
     }
@@ -314,7 +371,7 @@ class FinancialTransactionForm
             ->whereKey($projectId)
             ->get()
             ->mapWithKeys(fn (Project $project) => [
-                $project->getKey() => trim(($project->project_number ? $project->project_number . ' - ' : '') . ($project->{$titleColumn} ?? ''))
+                $project->getKey() => trim(($project->project_number ? $project->project_number.' - ' : '').($project->{$titleColumn} ?? '')),
             ])
             ->toArray();
     }

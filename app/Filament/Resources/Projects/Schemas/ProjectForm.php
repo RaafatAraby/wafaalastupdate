@@ -4,12 +4,17 @@ namespace App\Filament\Resources\Projects\Schemas;
 
 use App\Models\Country;
 use App\Models\Organization;
+use App\Models\ProjectPayment;
+use App\Services\ExchangeRateService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
 
@@ -167,7 +172,160 @@ class ProjectForm
                         ->columnSpanFull(),
                 ])
                 ->columns(2),
+
+            Section::make('الدفعات المستحقة')
+                ->description('جدولة دفعات المشروع — يُرسل النظام تذكيراً تلقائياً عند حلول تاريخ كل دفعة.')
+                ->icon('heroicon-o-banknotes')
+                ->collapsible()
+                ->schema([
+                    Repeater::make('payments_schedule')
+                        ->label(false)
+                        ->dehydrated(false)
+                        ->addActionLabel('إضافة دفعة جديدة')
+                        ->reorderableWithButtons()
+                        ->collapsed()
+                        ->itemLabel(function (array $state): ?string {
+                            $date = $state['due_date'] ?? null;
+                            $amount = $state['original_amount'] ?? null;
+                            $currency = $state['currency'] ?? 'USD';
+                            $pct = $state['percentage'] ?? null;
+                            $parts = [];
+                            if ($date) {
+                                $parts[] = $date;
+                            }
+                            if ($amount !== null && $amount !== '') {
+                                $parts[] = number_format((float) $amount, 2, '.', ',').' '.$currency;
+                            }
+                            if ($pct !== null && $pct !== '') {
+                                $parts[] = '('.$pct.'%)';
+                            }
+
+                            return $parts === [] ? null : implode(' • ', $parts);
+                        })
+                        ->defaultItems(0)
+                        ->columns(2)
+                        ->schema([
+                            DatePicker::make('due_date')
+                                ->label('تاريخ الدفعة')
+                                ->required(),
+
+                            Select::make('currency')
+                                ->label('العملة')
+                                ->options(app(ExchangeRateService::class)->currencyOptions())
+                                ->default('USD')
+                                ->native(false)
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                    $original = (float) ($get('original_amount') ?? 0);
+                                    $rate = app(ExchangeRateService::class)->rateToUsd((string) ($state ?: 'USD'));
+                                    $set('exchange_rate', $rate);
+                                    $set('amount', round($original * $rate, 2));
+                                }),
+
+                            TextInput::make('original_amount')
+                                ->label('قيمة الدفعة')
+                                ->numeric()
+                                ->step(0.01)
+                                ->minValue(0)
+                                ->required()
+                                ->live(onBlur: true)
+                                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal'])
+                                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                    $rate = (float) ($get('exchange_rate') ?? app(ExchangeRateService::class)->rateToUsd((string) ($get('currency') ?: 'USD')));
+                                    $set('exchange_rate', $rate);
+                                    $set('amount', round(((float) $state) * $rate, 2));
+                                }),
+
+                            TextInput::make('percentage')
+                                ->label('نسبة الدفعة (%)')
+                                ->helperText('اختياري — نسبة هذه الدفعة من إجمالي قيمة المشروع.')
+                                ->numeric()
+                                ->step(0.01)
+                                ->minValue(0)
+                                ->maxValue(100)
+                                ->suffix('%')
+                                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal']),
+
+                            TextInput::make('exchange_rate')
+                                ->label('سعر الصرف مقابل الدولار')
+                                ->numeric()
+                                ->step(0.000001)
+                                ->minValue(0)
+                                ->default(1)
+                                ->live(onBlur: true)
+                                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal'])
+                                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                    $original = (float) ($get('original_amount') ?? 0);
+                                    $rate = (float) ($state ?: 1);
+                                    $set('amount', round($original * $rate, 2));
+                                }),
+
+                            TextInput::make('amount')
+                                ->label('المعادل بالدولار (USD)')
+                                ->numeric()
+                                ->step(0.01)
+                                ->minValue(0)
+                                ->readOnly()
+                                ->extraInputAttributes(['lang' => 'en', 'dir' => 'ltr', 'inputmode' => 'decimal']),
+
+                            Textarea::make('description')
+                                ->label('وصف الدفعة')
+                                ->rows(2)
+                                ->columnSpanFull(),
+                        ]),
+                ])
+                ->columnSpanFull(),
         ]);
+    }
+
+    /**
+     * Normalise repeater rows into ProjectPayment-compatible attribute
+     * arrays. Used by CreateProject::afterCreate() and other callers
+     * that need to persist payment schedules captured from forms.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public static function normalisePaymentRows(array $rows): array
+    {
+        $rates = app(ExchangeRateService::class);
+        $normalised = [];
+
+        foreach ($rows as $row) {
+            $dueDate = $row['due_date'] ?? null;
+            $original = isset($row['original_amount']) && $row['original_amount'] !== ''
+                ? (float) $row['original_amount']
+                : null;
+
+            if (! $dueDate || $original === null) {
+                continue;
+            }
+
+            $currency = strtoupper((string) ($row['currency'] ?? 'USD'));
+            $rate = isset($row['exchange_rate']) && $row['exchange_rate'] !== ''
+                ? (float) $row['exchange_rate']
+                : $rates->rateToUsd($currency);
+            $amount = isset($row['amount']) && $row['amount'] !== ''
+                ? (float) $row['amount']
+                : round($original * $rate, 2);
+            $percentage = isset($row['percentage']) && $row['percentage'] !== ''
+                ? (float) $row['percentage']
+                : null;
+
+            $normalised[] = [
+                'due_date' => $dueDate,
+                'currency' => $currency,
+                'original_amount' => $original,
+                'exchange_rate' => $rate,
+                'amount' => $amount,
+                'percentage' => $percentage,
+                'description' => isset($row['description']) ? (string) $row['description'] : null,
+                'status' => ProjectPayment::STATUS_PENDING,
+            ];
+        }
+
+        return $normalised;
     }
 
     private static function optionsArray(string $key): array

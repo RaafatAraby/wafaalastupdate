@@ -15,8 +15,6 @@ class Project extends Model
      * Set by workflow actions (approveReadiness, updateExecution, rollback…)
      * just before saving so ProjectObserver can record the user-supplied
      * note instead of the generic fallback message.
-     *
-     * @var string|null
      */
     public ?string $stateChangeNote = null;
 
@@ -101,6 +99,11 @@ class Project extends Model
     public function financialTransactions()
     {
         return $this->hasMany(FinancialTransaction::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(ProjectPayment::class);
     }
 
     public function attachments()

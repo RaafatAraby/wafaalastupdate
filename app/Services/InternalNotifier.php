@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\Attachment;
 use App\Models\FinancialTransaction;
 use App\Models\Project;
+use App\Models\ProjectPayment;
 use App\Models\User;
 use App\Notifications\InternalActionNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class InternalNotifier
 {
@@ -56,7 +58,7 @@ class InternalNotifier
         try {
             $user->notify($notification);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning(
+            Log::warning(
                 'InternalNotifier: notification delivery failed',
                 [
                     'user_id' => $user->id,
@@ -156,7 +158,7 @@ class InternalNotifier
             return (int) $subject->country_id;
         }
 
-        if ($subject instanceof Attachment || $subject instanceof FinancialTransaction) {
+        if ($subject instanceof Attachment || $subject instanceof FinancialTransaction || $subject instanceof ProjectPayment) {
             $project = $subject->project;
             if ($project) {
                 return (int) $project->country_id;
@@ -250,7 +252,7 @@ class InternalNotifier
             return $subject;
         }
 
-        if ($subject instanceof Attachment || $subject instanceof FinancialTransaction) {
+        if ($subject instanceof Attachment || $subject instanceof FinancialTransaction || $subject instanceof ProjectPayment) {
             return $subject->project;
         }
 
@@ -271,6 +273,12 @@ class InternalNotifier
             return self::tryRoute('filament.admin.resources.financial-transactions.edit', $subject);
         }
 
+        if ($subject instanceof ProjectPayment && $subject->project) {
+            // Deep-link to the parent project's edit page (the payments
+            // relation manager is rendered there).
+            return self::tryRoute('filament.admin.resources.projects.edit', $subject->project);
+        }
+
         return null;
     }
 
@@ -285,12 +293,12 @@ class InternalNotifier
 
     private static function titleKeyFor(string $event): string
     {
-        return 'notifications.' . str_replace('.', '.', $event) . '.title';
+        return 'notifications.'.str_replace('.', '.', $event).'.title';
     }
 
     private static function bodyKeyFor(string $event): string
     {
-        return 'notifications.' . str_replace('.', '.', $event) . '.body';
+        return 'notifications.'.str_replace('.', '.', $event).'.body';
     }
 
     private static function stateLabel(?string $state): ?string
@@ -339,6 +347,8 @@ class InternalNotifier
             'financial.updated' => 'تعديل حركة مالية',
             'financial.approved' => 'اعتماد حركة مالية',
             'financial.rejected' => 'رفض حركة مالية',
+            'payment.due_reminder' => 'تذكير بدفعة مستحقة',
+            'payment.overdue' => 'دفعة متأخرة عن موعدها',
             default => 'تحديث في النظام',
         };
     }
@@ -368,7 +378,7 @@ class InternalNotifier
         };
 
         if (! empty($context['notes'])) {
-            $base .= ' — ملاحظات: ' . $context['notes'];
+            $base .= ' — ملاحظات: '.$context['notes'];
         }
 
         return $base;
@@ -402,7 +412,7 @@ class InternalNotifier
 
         $amountValue = $context['amount'] ?? $subject->amount;
         $amount = $amountValue !== null && $amountValue !== ''
-            ? number_format((float) $amountValue, 2) . ' USD'
+            ? number_format((float) $amountValue, 2).' USD'
             : null;
 
         return [$type, $typeLabel, $date, $amount];

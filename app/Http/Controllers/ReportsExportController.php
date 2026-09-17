@@ -4,17 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Services\Exports\ProjectsReportExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Streams the formatted XLSX project report. Country scoping is enforced
+ * the same way it is on the Reports page: country-scoped roles only see
+ * projects whose country_id is bound to them in user_countries.
+ */
 class ReportsExportController extends Controller
 {
     public function __invoke(Request $request): StreamedResponse
     {
         $stateColumn = Schema::hasColumn('projects', 'status') ? 'status' : 'state';
-        $titleColumn = Schema::hasColumn('projects', 'title') ? 'title' : (Schema::hasColumn('projects', 'name') ? 'name' : 'project_name');
 
         $query = Project::query()->with(['country', 'funderOrganization']);
 
@@ -32,9 +38,7 @@ class ReportsExportController extends Controller
             $allowedCountryIds = $user->allowedCountryIds();
             $query->whereIn('country_id', $allowedCountryIds ?: [0]);
 
-            // If the user passed a country filter outside their scope, ignore it
-            // (the whereIn above already enforces the bounds, but we drop the
-            // request param here for clarity rather than letting it noop).
+            // If the user passed a country filter outside their scope, drop it.
             if ($request->filled('country_id')
                 && ! in_array((int) $request->string('country_id')->toString(), array_map('intval', $allowedCountryIds), true)) {
                 $request->merge(['country_id' => null]);
@@ -61,46 +65,35 @@ class ReportsExportController extends Controller
             $query->whereDate('created_at', '<=', $request->string('date_to'));
         }
 
-        $fileName = 'projects-report-' . now()->format('Y-m-d-His') . '.csv';
+        $filters = [
+            'country_name' => $request->filled('country_id')
+                ? DB::table('countries')->where('id', $request->string('country_id'))->value('name_ar')
+                : null,
+            'organization_name' => $request->filled('organization_id')
+                ? DB::table('organizations')->where('id', $request->string('organization_id'))->value('name')
+                : null,
+            'state_label' => $request->filled('state')
+                ? $this->stateLabel((string) $request->string('state'))
+                : null,
+            'date_from' => $request->string('date_from')->toString() ?: null,
+            'date_to' => $request->string('date_to')->toString() ?: null,
+        ];
 
-        return response()->streamDownload(function () use ($query, $titleColumn) {
-            $handle = fopen('php://output', 'w');
+        return (new ProjectsReportExporter($query, $filters))
+            ->download('projects-report-'.now()->format('Y-m-d-His').'.xlsx');
+    }
 
-            // UTF-8 BOM لضمان عرض العربية بشكل صحيح في Excel
-            fwrite($handle, "\xEF\xBB\xBF");
-
-            fputcsv($handle, [
-                'وقت انشاء المشروع',
-                'رقم المشروع',
-                'اسم المشروع',
-                'الدولة',
-                'الجهة الممولة',
-                'مبلغ المشروع',
-                'الوصف',
-                'رابط التوثيق',
-            ]);
-
-            foreach ($query->cursor() as $project) {
-                $documentationLinks = array_filter([
-                    $project->photo_album_url ?? null,
-                    $project->video_album_url ?? null,
-                ], static fn ($url): bool => filled($url));
-
-                fputcsv($handle, [
-                    optional($project->created_at)->format('Y-m-d H:i:s') ?? '',
-                    (string) ($project->project_number ?? ''),
-                    (string) ($project->{$titleColumn} ?? ''),
-                    (string) ($project->country->name_ar ?? ''),
-                    (string) ($project->funderOrganization->name ?? ''),
-                    (string) ($project->approved_amount ?? ''),
-                    (string) ($project->description ?? ''),
-                    implode(' | ', $documentationLinks),
-                ]);
-            }
-
-            fclose($handle);
-        }, $fileName, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+    private function stateLabel(string $state): string
+    {
+        return [
+            'new' => 'جديد',
+            'pending_readiness' => 'بانتظار الجاهزية',
+            'ready_for_execution' => 'جاهز للتنفيذ',
+            'in_execution' => 'قيد التنفيذ',
+            'pending_documentation' => 'بانتظار التوثيق',
+            'delayed' => 'متأخر',
+            'completed' => 'مكتمل',
+            'closed' => 'مغلق',
+        ][$state] ?? $state;
     }
 }

@@ -89,7 +89,7 @@
                 <div class="rp-actions">
                     <button class="rp-btn rp-btn-primary" type="submit">تطبيق الفلاتر</button>
                     <a class="rp-btn rp-btn-light" href="{{ url()->current() }}">إعادة ضبط</a>
-                    <a class="rp-btn rp-btn-light" href="{{ route('reports.export', request()->query()) }}">تصدير CSV</a>
+                    <a class="rp-btn rp-btn-primary" href="{{ route('reports.export', request()->query()) }}">تصدير Excel</a>
                 </div>
             </form>
         </div>

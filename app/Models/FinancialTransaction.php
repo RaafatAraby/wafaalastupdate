@@ -18,6 +18,9 @@ class FinancialTransaction extends Model
         'funding_source_country',
         'reference_no',
         'amount',
+        'currency',
+        'original_amount',
+        'exchange_rate',
         'transfer_method',
         'bank_name',
         'transaction_date',
@@ -37,9 +40,28 @@ class FinancialTransaction extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'original_amount' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
             'transaction_date' => 'date',
             'approved_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Formatted helper for templates: "1,000.00 TRY (≈ 32.00 USD)".
+     */
+    public function getFormattedAmountAttribute(): string
+    {
+        $usd = 'USD '.number_format((float) $this->amount, 2, '.', ',');
+
+        $currency = $this->currency ?: 'USD';
+        if ($currency === 'USD' || $this->original_amount === null) {
+            return $usd;
+        }
+
+        $original = number_format((float) $this->original_amount, 2, '.', ',').' '.$currency;
+
+        return $original.' (≈ '.$usd.')';
     }
 
     /**
@@ -84,6 +106,7 @@ class FinancialTransaction extends Model
             return null;
         }
         $list = (array) config('world_countries', []);
+
         return $list[$this->funding_source_country] ?? $this->funding_source_country;
     }
 

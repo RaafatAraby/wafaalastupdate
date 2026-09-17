@@ -7,6 +7,7 @@ use App\Models\FinancialTransaction;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Services\ActivityLogger;
+use App\Services\Exports\FinancialTransactionsExporter;
 use App\Services\InternalNotifier;
 use App\Services\ProjectAutoClose;
 use Filament\Actions;
@@ -49,17 +50,38 @@ class FinancialTransactionsTable
                 TextColumn::make('transaction_type')
                     ->label(__('financial_transaction.table.columns.transaction_type'))
                     ->badge()
-                    ->formatStateUsing(fn (?string $state) => __('financial_transaction.form.options.transaction_types.' . ($state ?? 'incoming'))),
+                    ->formatStateUsing(fn (?string $state) => __('financial_transaction.form.options.transaction_types.'.($state ?? 'incoming'))),
+
+                TextColumn::make('original_amount')
+                    ->label(__('financial_transaction.table.columns.original_amount'))
+                    ->formatStateUsing(function ($state, FinancialTransaction $record) {
+                        if ($state === null) {
+                            return '-';
+                        }
+                        $currency = $record->currency ?: 'USD';
+
+                        return number_format((float) $state, 2, '.', ',').' '.$currency;
+                    })
+                    ->toggleable(),
 
                 TextColumn::make('amount')
                     ->label(__('financial_transaction.table.columns.amount'))
-                    ->formatStateUsing(fn ($state) => $state === null ? '-' : 'USD ' . number_format((float) $state, 2, '.', ','))
+                    ->formatStateUsing(fn ($state) => $state === null ? '-' : 'USD '.number_format((float) $state, 2, '.', ','))
                     ->sortable(),
+
+                TextColumn::make('exchange_rate')
+                    ->label(__('financial_transaction.table.columns.exchange_rate'))
+                    ->formatStateUsing(fn ($state) => $state === null ? '-' : number_format((float) $state, 6, '.', ''))
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('currency')
+                    ->label(__('financial_transaction.table.columns.currency'))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('approval_status')
                     ->label(__('financial_transaction.table.columns.approval_status'))
                     ->badge()
-                    ->formatStateUsing(fn (?string $state) => __('financial_transaction.table.approval.' . ($state ?? 'pending'))),
+                    ->formatStateUsing(fn (?string $state) => __('financial_transaction.table.approval.'.($state ?? 'pending'))),
 
                 TextColumn::make('transaction_date')
                     ->label(__('financial_transaction.table.columns.transaction_date'))
@@ -87,35 +109,33 @@ class FinancialTransactionsTable
                         );
                     }),
 
-           SelectFilter::make('project_id')
-    ->label(__('financial_transaction.form.fields.project'))
-    ->options(
-        \App\Models\Project::query()
-            ->orderBy('project_number')
-            ->get()
-            ->mapWithKeys(fn ($project) => [
-                $project->getKey() => trim(($project->project_number ? $project->project_number . ' - ' : '') . ($project->title ?? $project->name ?? $project->project_name ?? ''))
-            ])
-            ->toArray()
-    )
-    ->searchable()
-    ->preload(),
+                SelectFilter::make('project_id')
+                    ->label(__('financial_transaction.form.fields.project'))
+                    ->options(
+                        Project::query()
+                            ->orderBy('project_number')
+                            ->get()
+                            ->mapWithKeys(fn ($project) => [
+                                $project->getKey() => trim(($project->project_number ? $project->project_number.' - ' : '').($project->title ?? $project->name ?? $project->project_name ?? '')),
+                            ])
+                            ->toArray()
+                    )
+                    ->searchable()
+                    ->preload(),
 
-
-SelectFilter::make('bank_name')
-    ->label(__('financial_transaction.form.fields.bank_name'))
-    ->options(
-        \App\Models\FinancialTransaction::query()
-            ->whereNotNull('bank_name')
-            ->where('bank_name', '!=', '')
-            ->distinct()
-            ->orderBy('bank_name')
-            ->pluck('bank_name', 'bank_name')
-            ->toArray()
-    )
-    ->searchable()
-    ->preload(),
-
+                SelectFilter::make('bank_name')
+                    ->label(__('financial_transaction.form.fields.bank_name'))
+                    ->options(
+                        FinancialTransaction::query()
+                            ->whereNotNull('bank_name')
+                            ->where('bank_name', '!=', '')
+                            ->distinct()
+                            ->orderBy('bank_name')
+                            ->pluck('bank_name', 'bank_name')
+                            ->toArray()
+                    )
+                    ->searchable()
+                    ->preload(),
 
                 SelectFilter::make('transaction_type')
                     ->label(__('financial_transaction.form.fields.transaction_type'))
@@ -158,6 +178,20 @@ SelectFilter::make('bank_name')
             ->filtersLayout(FiltersLayout::AboveContentCollapsible)
             ->filtersFormColumns(5)
             ->deferFilters()
+            ->headerActions([
+                // Streams the currently-filtered set as a designed XLSX
+                // workbook. Honours filters by cloning the table query so
+                // the user gets exactly what they're looking at on screen.
+                Actions\Action::make('exportXlsx')
+                    ->label('تصدير Excel')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('success')
+                    ->action(function ($livewire) {
+                        return (new FinancialTransactionsExporter(
+                            $livewire->getFilteredTableQuery()
+                        ))->download();
+                    }),
+            ])
             ->recordActions([
                 // Read-only details modal: visible to anyone who can view
                 // the record. Roles with view+create only (no update)
@@ -224,6 +258,7 @@ SelectFilter::make('bank_name')
                             Notification::make()->danger()
                                 ->title('لا يمكن رفض حركة مُعتمدة')
                                 ->send();
+
                             return;
                         }
 
@@ -259,8 +294,8 @@ SelectFilter::make('bank_name')
                     ->modalHeading('حذف الحوالة')
                     ->modalDescription('سيتم حذف الحوالة نهائياً. هذه العملية لا يمكن التراجع عنها.')
                     ->modalSubmitActionLabel('نعم، حذف'),
-                    // حذف: التسجيل في سجل العمليات يتم تلقائياً عبر FinancialTransactionObserver::deleted()
-                    // لتجنب تكرار سطور ActivityLog على نفس الحدث.
+                // حذف: التسجيل في سجل العمليات يتم تلقائياً عبر FinancialTransactionObserver::deleted()
+                // لتجنب تكرار سطور ActivityLog على نفس الحدث.
             ]);
     }
 

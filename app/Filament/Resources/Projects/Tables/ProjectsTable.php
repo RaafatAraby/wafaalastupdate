@@ -42,6 +42,11 @@ class ProjectsTable
                     ->searchable()
                     ->wrap(),
 
+                TextColumn::make('description')
+                    ->label('وصف المشروع')
+                    ->searchable()
+                    ->wrap(),
+
                 TextColumn::make('country.name_ar')
                     ->label('الدولة')
                     ->searchable()

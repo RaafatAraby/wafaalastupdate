@@ -7,9 +7,8 @@ use App\Models\Organization;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Components\Grid;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -79,21 +78,110 @@ class ProjectEditForm
             $by = $row->user_name ?? 'النظام';
             $note = trim((string) ($row->notes ?? ''));
             $noteHtml = $note !== ''
-                ? '<div style="margin-top:6px;padding:8px 10px;background:#f3f4f6;border-radius:8px;color:#111827;white-space:pre-wrap;">' . e($note) . '</div>'
+                ? '<div style="margin-top:6px;padding:8px 10px;background:#f3f4f6;border-radius:8px;color:#111827;white-space:pre-wrap;">'.e($note).'</div>'
                 : '';
 
             $items[] = '<li style="padding:10px 0;border-bottom:1px solid #e5e7eb;">'
-                . '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-                . '<span style="background:#e5e7eb;border-radius:6px;padding:2px 8px;font-size:.8rem;">' . e($from) . '</span>'
-                . '<span style="color:#6b7280;">←</span>'
-                . '<span style="background:#dcfce7;color:#065f46;border-radius:6px;padding:2px 8px;font-size:.8rem;">' . e($to) . '</span>'
-                . '<span style="color:#6b7280;font-size:.8rem;">' . e($by) . ' • ' . e($when) . '</span>'
-                . '</div>'
-                . $noteHtml
-                . '</li>';
+                .'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+                .'<span style="background:#e5e7eb;border-radius:6px;padding:2px 8px;font-size:.8rem;">'.e($from).'</span>'
+                .'<span style="color:#6b7280;">←</span>'
+                .'<span style="background:#dcfce7;color:#065f46;border-radius:6px;padding:2px 8px;font-size:.8rem;">'.e($to).'</span>'
+                .'<span style="color:#6b7280;font-size:.8rem;">'.e($by).' • '.e($when).'</span>'
+                .'</div>'
+                .$noteHtml
+                .'</li>';
         }
 
-        $html = '<ul style="list-style:none;padding:0;margin:0;">' . implode('', $items) . '</ul>';
+        $html = '<ul style="list-style:none;padding:0;margin:0;">'.implode('', $items).'</ul>';
+
+        return new HtmlString($html);
+    }
+
+    /**
+     * Render a compact summary of the project's payment schedule as Arabic
+     * HTML so the user can see the upcoming/late instalments without
+     * leaving the Edit page (the editable table is the relation manager
+     * underneath this form).
+     */
+    protected static function renderPaymentsSummary(?Model $project): HtmlString
+    {
+        if (! $project || ! $project->getKey()) {
+            return new HtmlString('<p style="color:#6b7280;">لا توجد دفعات مجدولة بعد. أضف الدفعات من القسم أدناه.</p>');
+        }
+
+        $rows = DB::table('project_payments')
+            ->where('project_id', $project->getKey())
+            ->orderBy('due_date')
+            ->get([
+                'due_date',
+                'amount',
+                'currency',
+                'original_amount',
+                'percentage',
+                'status',
+                'description',
+            ]);
+
+        if ($rows->isEmpty()) {
+            return new HtmlString('<p style="color:#6b7280;">لا توجد دفعات مجدولة بعد. أضف الدفعات من القسم أدناه.</p>');
+        }
+
+        $statusLabels = [
+            'pending' => ['قيد الانتظار', '#1f2937', '#dbeafe'],
+            'notified' => ['تم إرسال التذكير', '#92400e', '#fef3c7'],
+            'paid' => ['تم الدفع', '#065f46', '#dcfce7'],
+            'canceled' => ['ملغاة', '#374151', '#e5e7eb'],
+        ];
+
+        $today = now()->startOfDay();
+        $items = [];
+        $totalUsd = 0.0;
+        $totalPct = 0.0;
+
+        foreach ($rows as $row) {
+            $due = $row->due_date ? date('Y-m-d', strtotime((string) $row->due_date)) : '-';
+            $isOverdue = $row->due_date && strtotime((string) $row->due_date) < $today->timestamp
+                && ! in_array($row->status, ['paid', 'canceled'], true);
+            $totalUsd += (float) $row->amount;
+            $totalPct += (float) ($row->percentage ?? 0);
+
+            $original = $row->original_amount !== null
+                ? number_format((float) $row->original_amount, 2, '.', ',').' '.($row->currency ?: 'USD')
+                : number_format((float) $row->amount, 2, '.', ',').' USD';
+            $usdEquiv = $row->currency && $row->currency !== 'USD'
+                ? ' (≈ '.number_format((float) $row->amount, 2, '.', ',').' USD)'
+                : '';
+            $pct = $row->percentage !== null
+                ? ' • '.number_format((float) $row->percentage, 2, '.', '').'%'
+                : '';
+
+            [$statusText, $statusFg, $statusBg] = $statusLabels[$row->status] ?? [$row->status, '#1f2937', '#e5e7eb'];
+            if ($isOverdue) {
+                [$statusText, $statusFg, $statusBg] = ['متأخرة', '#991b1b', '#fee2e2'];
+            }
+
+            $note = trim((string) ($row->description ?? ''));
+            $noteHtml = $note !== ''
+                ? '<div style="margin-top:6px;color:#374151;font-size:.85rem;">'.e($note).'</div>'
+                : '';
+
+            $items[] = '<li style="padding:10px 0;border-bottom:1px solid #e5e7eb;">'
+                .'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+                .'<span style="background:#f3f4f6;border-radius:6px;padding:2px 8px;font-size:.8rem;">'.e($due).'</span>'
+                .'<span style="font-weight:600;color:#111827;">'.e($original).'</span>'
+                .'<span style="color:#6b7280;font-size:.85rem;">'.e($usdEquiv.$pct).'</span>'
+                .'<span style="margin-inline-start:auto;background:'.$statusBg.';color:'.$statusFg.';border-radius:9999px;padding:2px 10px;font-size:.75rem;">'.e($statusText).'</span>'
+                .'</div>'
+                .$noteHtml
+                .'</li>';
+        }
+
+        $totalsHtml = '<div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;color:#111827;">'
+            .'<span><strong>إجمالي الدفعات (USD):</strong> '.number_format($totalUsd, 2, '.', ',').'</span>'
+            .($totalPct > 0 ? '<span><strong>مجموع النسب:</strong> '.number_format($totalPct, 2, '.', '').'%</span>' : '')
+            .'</div>';
+
+        $html = '<ul style="list-style:none;padding:0;margin:0;">'.implode('', $items).'</ul>'.$totalsHtml;
 
         return new HtmlString($html);
     }
@@ -189,8 +277,8 @@ class ProjectEditForm
                                             ->get()
                                             ->mapWithKeys(fn ($org) => [
                                                 $org->id => ($org->organization_code
-                                                    ? $org->organization_code . ' - '
-                                                    : '') . $org->name,
+                                                    ? $org->organization_code.' - '
+                                                    : '').$org->name,
                                             ])
                                             ->all())
                                         ->searchable()
@@ -284,6 +372,18 @@ class ProjectEditForm
                                         ->label(__('project.form.fields.description'))
                                         ->rows(4)
                                         ->columnSpanFull(),
+                                ]),
+
+                            // ───────── Section G: Payments summary ─────────
+                            Section::make('الدفعات المستحقة للمشروع')
+                                ->icon('heroicon-o-banknotes')
+                                ->description('ملخص جدول الدفعات — للإضافة/التعديل استخدم قسم "الدفعات المالية المجدولة" في أسفل الصفحة.')
+                                ->collapsible()
+                                ->schema([
+                                    Placeholder::make('payments_summary')
+                                        ->label('')
+                                        ->columnSpanFull()
+                                        ->content(fn (?Model $record): HtmlString => self::renderPaymentsSummary($record)),
                                 ]),
                         ]),
 

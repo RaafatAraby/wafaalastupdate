@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Widgets\FinanceStatsOverview;
 use App\Filament\Widgets\ProjectStatsOverview;
@@ -33,20 +34,21 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->profile(EditProfile::class, isSimple: false)
             ->maxContentWidth(Width::Full)
-            
+
             // ─── الشعار (Logo) ───
             ->brandLogo(asset('/images/wafaa-logo.png'))
             ->brandLogoHeight('3rem')
             ->favicon(asset('/images/wafaa-logo.png'))
-            
+
             // ─── الخط والألوان (Font & Colors) ───
             ->font('Alexandria')
             ->colors([
-                'primary' => Color::hex('#0F6E56'), 
-                'gray'    => Color::Slate,
+                'primary' => Color::hex('#0F6E56'),
+                'gray' => Color::Slate,
             ])
-            
+
             // ─── التصميم المخصص (CSS للوضع النهاري والليلي) ───
             ->renderHook(
                 PanelsRenderHook::HEAD_END,

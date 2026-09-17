@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Projects;
 
-use App\Filament\Resources\Projects\Pages;
 use App\Filament\Resources\Projects\Schemas\ProjectForm;
 use App\Filament\Resources\Projects\Tables\ProjectsTable;
 use App\Models\Project;
@@ -53,7 +52,9 @@ class ProjectResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            RelationManagers\PaymentsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
